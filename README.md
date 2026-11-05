@@ -61,7 +61,7 @@ AI-Knowledge-Assistant/
 1. Clone the repository.
 
 ```bash
-git clone YOUR_GITHUB_REPOSITORY_URL
+git clone https://github.com/MidhunM1/ai-knowledge-assistant
 ```
 
 2. Navigate into the project folder.
