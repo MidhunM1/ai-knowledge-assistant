@@ -3,10 +3,11 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from config import (
     GEMINI_CHAT_MODEL,
-    GEMINI_MAX_RETRIES,
+    GEMINI_503_MAX_ATTEMPTS,
     GEMINI_REQUEST_TIMEOUT_SECONDS,
     GOOGLE_API_KEY,
 )
+from src.error_handling import invoke_with_503_retries
 from src.vector_store import load_vector_store
 
 
@@ -90,17 +91,21 @@ def get_answer(question, chat_history=None):
         temperature=None,
         max_tokens=512,
         request_timeout=GEMINI_REQUEST_TIMEOUT_SECONDS,
-        max_retries=GEMINI_MAX_RETRIES
+        # One SDK attempt; application retries only HTTP 503, never HTTP 429.
+        max_retries=1
     )
 
     chain = prompt | model
 
-    response = chain.invoke(
-        {
-            "history": history_text,
-            "context": context,
-            "question": question
-        }
+    response = invoke_with_503_retries(
+        lambda: chain.invoke(
+            {
+                "history": history_text,
+                "context": context,
+                "question": question
+            }
+        ),
+        max_attempts=GEMINI_503_MAX_ATTEMPTS,
     )
 
     sources = []

@@ -65,7 +65,7 @@ def test_successful_answer_uses_supported_model_and_explicit_retries(monkeypatch
     assert answer == "AI enables intelligent tasks."
     assert sources == [{"file": "guide.pdf", "page": 2}]
     assert model_options["model"] == rag_pipeline.GEMINI_CHAT_MODEL
-    assert model_options["max_retries"] == rag_pipeline.GEMINI_MAX_RETRIES
+    assert model_options["max_retries"] == 1
     assert model_options["request_timeout"] == rag_pipeline.GEMINI_REQUEST_TIMEOUT_SECONDS
     assert model_options["max_tokens"] == 512
     assert model_options["temperature"] is None

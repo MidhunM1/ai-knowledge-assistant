@@ -6,7 +6,7 @@ load_dotenv()
 
 GEMINI_CHAT_MODEL = "gemini-3.8-flash"
 GEMINI_EMBEDDING_MODEL = "gemini-embedding-001"
-GEMINI_MAX_RETRIES = 3
+GEMINI_503_MAX_ATTEMPTS = 3
 GEMINI_REQUEST_TIMEOUT_SECONDS = 45
 
 # Get Gemini API key
