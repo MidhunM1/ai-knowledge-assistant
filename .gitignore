@@ -1,0 +1,26 @@
+
+# Python virtual environment
+venv/
+.venv/
+
+# Environment variables and API keys
+.env
+.env.*
+
+# Python cache files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# ChromaDB database
+chroma_db/
+
+# Uploaded PDF files
+data/uploaded_pdfs/
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Operating system files
+.DS_Store
+Thumbs.db
