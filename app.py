@@ -7,6 +7,7 @@ from src.document_loader import load_multiple_pdfs
 from src.text_splitter import split_documents
 from src.vector_store import create_vector_store, clear_vector_store
 from src.rag_pipeline import get_answer
+from src.error_handling import safe_api_error_message
 
 
 MAX_FILE_SIZE = 10 * 1024 * 1024
@@ -181,9 +182,7 @@ if st.button("Process Documents"):
 
             st.session_state.documents_processed = False
 
-            st.error(
-                f"Document processing failed: {error}"
-            )
+            st.error(safe_api_error_message(error, "Document processing"))
 
 
 st.divider()
@@ -306,6 +305,4 @@ if question:
 
         except Exception as error:
 
-            st.error(
-                f"Unable to generate answer: {error}"
-            )
+            st.error(safe_api_error_message(error, "Answer generation"))

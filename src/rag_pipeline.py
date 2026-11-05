@@ -1,6 +1,12 @@
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
+from config import (
+    GEMINI_CHAT_MODEL,
+    GEMINI_MAX_RETRIES,
+    GEMINI_REQUEST_TIMEOUT_SECONDS,
+    GOOGLE_API_KEY,
+)
 from src.vector_store import load_vector_store
 
 
@@ -79,11 +85,12 @@ def get_answer(question, chat_history=None):
     )
 
     model = ChatGoogleGenerativeAI(
-        model="gemini-3.8-flash",
-        temperature=0,
-        max_output_tokens=512,
-        timeout=120,
-        max_retries=0
+        model=GEMINI_CHAT_MODEL,
+        api_key=GOOGLE_API_KEY,
+        temperature=None,
+        max_tokens=512,
+        request_timeout=GEMINI_REQUEST_TIMEOUT_SECONDS,
+        max_retries=GEMINI_MAX_RETRIES
     )
 
     chain = prompt | model
@@ -108,4 +115,4 @@ def get_answer(question, chat_history=None):
         if source not in sources:
             sources.append(source)
 
-    return response.content, sources
+    return response.text, sources
