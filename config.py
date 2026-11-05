@@ -1,7 +1,7 @@
+
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env
 load_dotenv()
 
 GEMINI_CHAT_MODEL = "gemini-3.8-flash"
@@ -9,9 +9,20 @@ GEMINI_EMBEDDING_MODEL = "gemini-embedding-001"
 GEMINI_503_MAX_ATTEMPTS = 3
 GEMINI_REQUEST_TIMEOUT_SECONDS = 45
 
-# Get Gemini API key
+# First, check the local .env file
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-# Check whether the API key exists
+# If not found, check Streamlit Cloud Secrets
 if not GOOGLE_API_KEY:
-    raise ValueError("Google API key not found. Check your .env file.")
+    try:
+        import streamlit as st
+        GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY")
+    except Exception:
+        GOOGLE_API_KEY = None
+
+# Validate API key
+if not GOOGLE_API_KEY:
+    raise ValueError(
+        "Google API key not found. "
+        "Configure GOOGLE_API_KEY in .env or Streamlit Secrets."
+    )
