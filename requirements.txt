@@ -11,3 +11,4 @@ pymupdf
 pytesseract
 pillow
 pytest
+langchain-chroma
