@@ -1,3 +1,4 @@
+
 import pytest
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage
@@ -9,7 +10,6 @@ from src import rag_pipeline
 def test_empty_question():
 
     with pytest.raises(ValueError):
-
         rag_pipeline.get_answer("")
 
 
@@ -38,9 +38,15 @@ def test_no_relevant_documents(monkeypatch):
     assert sources == []
 
 
-def test_successful_answer_uses_supported_model_and_explicit_retries(monkeypatch):
+def test_successful_answer_uses_groq_model(monkeypatch):
+
     class FakeVectorStore:
-        def similarity_search_with_relevance_scores(self, question, k):
+
+        def similarity_search_with_relevance_scores(
+            self,
+            question,
+            k
+        ):
             return [
                 (
                     Document(
@@ -55,17 +61,36 @@ def test_successful_answer_uses_supported_model_and_explicit_retries(monkeypatch
 
     def fake_chat_model(**options):
         model_options.update(options)
-        return RunnableLambda(lambda _prompt: AIMessage(content="AI enables intelligent tasks."))
 
-    monkeypatch.setattr(rag_pipeline, "load_vector_store", lambda: FakeVectorStore())
-    monkeypatch.setattr(rag_pipeline, "ChatGoogleGenerativeAI", fake_chat_model)
+        return RunnableLambda(
+            lambda _prompt: AIMessage(
+                content="AI enables intelligent tasks."
+            )
+        )
+
+    monkeypatch.setattr(
+        rag_pipeline,
+        "load_vector_store",
+        lambda: FakeVectorStore()
+    )
+
+    monkeypatch.setattr(
+        rag_pipeline,
+        "ChatGroq",
+        fake_chat_model
+    )
 
     answer, sources = rag_pipeline.get_answer("What is AI?")
 
     assert answer == "AI enables intelligent tasks."
-    assert sources == [{"file": "guide.pdf", "page": 2}]
-    assert model_options["model"] == rag_pipeline.GEMINI_CHAT_MODEL
-    assert model_options["max_retries"] == 1
-    assert model_options["request_timeout"] == rag_pipeline.GEMINI_REQUEST_TIMEOUT_SECONDS
+
+    assert sources == [
+        {"file": "guide.pdf", "page": 2}
+    ]
+
+    assert model_options["model"] == rag_pipeline.GROQ_CHAT_MODEL
+    assert model_options["api_key"] == rag_pipeline.GROQ_API_KEY
+    assert model_options["max_retries"] == 2
+    assert model_options["timeout"] == 60
     assert model_options["max_tokens"] == 512
-    assert model_options["temperature"] is None
+    assert model_options["temperature"] == 0

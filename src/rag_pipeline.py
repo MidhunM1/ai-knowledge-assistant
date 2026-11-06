@@ -1,13 +1,8 @@
 
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
-from config import (
-    GEMINI_CHAT_MODEL,
-    GEMINI_503_MAX_ATTEMPTS,
-    GEMINI_REQUEST_TIMEOUT_SECONDS,
-    GOOGLE_API_KEY,
-)
-from src.error_handling import invoke_with_503_retries
+
+from config import GROQ_CHAT_MODEL, GROQ_API_KEY
 from src.vector_store import load_vector_store
 
 
@@ -26,12 +21,10 @@ def get_answer(question, chat_history=None):
     relevant_documents = []
 
     for document, score in results:
-
         if score >= 0.30:
             relevant_documents.append(document)
 
     if not relevant_documents:
-
         return (
             "I couldn't find relevant information in the uploaded documents. "
             "Please try asking a different question.",
@@ -50,12 +43,9 @@ def get_answer(question, chat_history=None):
     history_text = ""
 
     if chat_history:
-
         for message in chat_history[-6:]:
-
             role = message["role"].upper()
             content = message["content"]
-
             history_text += f"{role}: {content}\n"
 
     prompt = ChatPromptTemplate.from_template(
@@ -85,33 +75,28 @@ def get_answer(question, chat_history=None):
         """
     )
 
-    model = ChatGoogleGenerativeAI(
-        model=GEMINI_CHAT_MODEL,
-        api_key=GOOGLE_API_KEY,
-        temperature=None,
+    model = ChatGroq(
+        model=GROQ_CHAT_MODEL,
+        api_key=GROQ_API_KEY,
+        temperature=0,
         max_tokens=512,
-        request_timeout=GEMINI_REQUEST_TIMEOUT_SECONDS,
-        # One SDK attempt; application retries only HTTP 503, never HTTP 429.
-        max_retries=1
+        timeout=60,
+        max_retries=2
     )
 
     chain = prompt | model
 
-    response = invoke_with_503_retries(
-        lambda: chain.invoke(
-            {
-                "history": history_text,
-                "context": context,
-                "question": question
-            }
-        ),
-        max_attempts=GEMINI_503_MAX_ATTEMPTS,
+    response = chain.invoke(
+        {
+            "history": history_text,
+            "context": context,
+            "question": question
+        }
     )
 
     sources = []
 
     for doc in relevant_documents:
-
         source = {
             "file": doc.metadata.get("source"),
             "page": doc.metadata.get("page")
@@ -120,4 +105,4 @@ def get_answer(question, chat_history=None):
         if source not in sources:
             sources.append(source)
 
-    return response.text, sources
+    return response.content, sources

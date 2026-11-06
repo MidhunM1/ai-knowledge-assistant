@@ -1,28 +1,47 @@
 
 import os
+import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv()
 
-GEMINI_CHAT_MODEL = "gemini-3.8-flash"
+
+def get_secret(name):
+    # First check local .env
+    value = os.getenv(name)
+
+    if value:
+        return value
+
+    # Otherwise check Streamlit Cloud Secrets
+    try:
+        return st.secrets.get(name)
+    except Exception:
+        return None
+
+
+# API keys
+GOOGLE_API_KEY = get_secret("GOOGLE_API_KEY")
+GROQ_API_KEY = get_secret("GROQ_API_KEY")
+
+# Models
+GROQ_CHAT_MODEL = "openai/gpt-oss-120b"
 GEMINI_EMBEDDING_MODEL = "gemini-embedding-001"
+
+# Gemini settings
 GEMINI_503_MAX_ATTEMPTS = 3
 GEMINI_REQUEST_TIMEOUT_SECONDS = 45
 
-# First, check the local .env file
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-# If not found, check Streamlit Cloud Secrets
-if not GOOGLE_API_KEY:
-    try:
-        import streamlit as st
-        GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY")
-    except Exception:
-        GOOGLE_API_KEY = None
-
-# Validate API key
+# Validate API keys
 if not GOOGLE_API_KEY:
     raise ValueError(
         "Google API key not found. "
         "Configure GOOGLE_API_KEY in .env or Streamlit Secrets."
+    )
+
+if not GROQ_API_KEY:
+    raise ValueError(
+        "Groq API key not found. "
+        "Configure GROQ_API_KEY in .env or Streamlit Secrets."
     )
