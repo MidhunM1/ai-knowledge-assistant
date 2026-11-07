@@ -1,5 +1,10 @@
-
 import streamlit as st
+
+from config import SUPABASE_URL, SUPABASE_KEY
+
+st.write("Supabase URL loaded:", bool(SUPABASE_URL))
+st.write("Supabase KEY loaded:", bool(SUPABASE_KEY))
+
 import os
 import hashlib
 import shutil
