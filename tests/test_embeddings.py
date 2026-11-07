@@ -1,9 +1,22 @@
-from src.embeddings import get_embeddings
+from unittest.mock import MagicMock
+
+import src.embeddings as embeddings_module
 
 
-def test_get_embeddings():
+def test_get_embeddings(monkeypatch):
+    mock_embeddings = MagicMock()
 
-    embeddings = get_embeddings()
+    def fake_embeddings(**kwargs):
+        assert kwargs["model"] == embeddings_module.GEMINI_EMBEDDING_MODEL
+        assert kwargs["api_key"] == embeddings_module.GOOGLE_API_KEY
+        return mock_embeddings
 
-    assert embeddings is not None
-    
+    monkeypatch.setattr(
+        embeddings_module,
+        "GoogleGenerativeAIEmbeddings",
+        fake_embeddings
+    )
+
+    result = embeddings_module.get_embeddings()
+
+    assert result is mock_embeddings

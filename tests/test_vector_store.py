@@ -1,77 +1,121 @@
-from langchain_core.documents import Document
+from unittest.mock import MagicMock
 
-from src import vector_store
+import pytest
 
-
-class FakeEmbeddings:
-
-    def embed_documents(self, texts):
-
-        return [
-            [float(len(text)), float(text.count(" ") + 1), 0.1]
-            for text in texts
-        ]
-
-    def embed_query(self, text):
-
-        return [
-            float(len(text)),
-            float(text.count(" ") + 1),
-            0.1
-        ]
+import src.vector_store as vector_module
 
 
-def test_create_and_clear_vector_store(tmp_path, monkeypatch):
+def test_get_conversation_path():
+    path = vector_module.get_conversation_path("chat123")
 
-    monkeypatch.setattr(
-        vector_store,
-        "get_embeddings",
-        lambda: FakeEmbeddings()
-    )
+    assert path.endswith("chat123")
+
+
+def test_get_conversation_path_without_id():
+    with pytest.raises(ValueError):
+        vector_module.get_conversation_path(None)
+
+
+def test_create_vector_store(tmp_path, monkeypatch):
+    monkeypatch.setattr(vector_module, "DB_PATH", str(tmp_path))
+    monkeypatch.setattr(vector_module, "get_embeddings", MagicMock())
+
+    mock_store = MagicMock()
 
     monkeypatch.setattr(
-        vector_store,
-        "DB_PATH",
-        str(tmp_path / "chroma_db")
+        vector_module,
+        "clear_vector_store",
+        lambda conversation_id: None
     )
 
     monkeypatch.setattr(
-        vector_store,
-        "COLLECTION_NAME",
-        "test_knowledge_assistant"
+        vector_module,
+        "Chroma",
+        lambda **kwargs: mock_store
     )
 
-    documents = [
-        Document(
-            page_content="Artificial Intelligence is a technology.",
-            metadata={
-                "source": "sample.pdf",
-                "page": 1
-            }
-        )
-    ]
+    chunks = [MagicMock()]
 
-    # Store documents
+    result = vector_module.create_vector_store(chunks, "chat123")
 
-    database = vector_store.create_vector_store(documents)
+    assert result is mock_store
+    mock_store.add_documents.assert_called_once_with(chunks)
 
-    assert database._collection.count() == 1
 
-    # Retrieve documents
+def test_create_vector_store_without_chunks():
+    with pytest.raises(ValueError, match="No document chunks"):
+        vector_module.create_vector_store([], "chat123")
 
-    results = database.similarity_search(
-        "Artificial Intelligence",
-        k=1
+
+def test_load_vector_store_missing_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(vector_module, "DB_PATH", str(tmp_path))
+
+    with pytest.raises(ValueError, match="No knowledge base found"):
+        vector_module.load_vector_store("missing-chat")
+
+
+def test_load_vector_store(tmp_path, monkeypatch):
+    monkeypatch.setattr(vector_module, "DB_PATH", str(tmp_path))
+    monkeypatch.setattr(vector_module, "get_embeddings", MagicMock())
+
+    conversation_path = tmp_path / "chat123"
+    conversation_path.mkdir()
+
+    mock_store = MagicMock()
+
+    monkeypatch.setattr(
+        vector_module,
+        "Chroma",
+        lambda **kwargs: mock_store
     )
 
-    assert len(results) == 1
-    assert results[0].metadata["source"] == "sample.pdf"
+    result = vector_module.load_vector_store("chat123")
 
-    # Clear the database
+    assert result is mock_store
 
-    vector_store.clear_vector_store()
 
-    empty_database = vector_store.load_vector_store()
+def test_clear_vector_store(tmp_path, monkeypatch):
+    monkeypatch.setattr(vector_module, "DB_PATH", str(tmp_path))
 
-    assert empty_database._collection.count() == 0
-    
+    conversation_path = tmp_path / "chat123"
+    conversation_path.mkdir()
+
+    mock_store = MagicMock()
+
+    monkeypatch.setattr(
+        vector_module,
+        "Chroma",
+        lambda **kwargs: mock_store
+    )
+
+    vector_module.clear_vector_store("chat123")
+
+    mock_store.delete_collection.assert_called_once()
+
+
+def test_vector_store_exists(tmp_path, monkeypatch):
+    monkeypatch.setattr(vector_module, "DB_PATH", str(tmp_path))
+
+    conversation_path = tmp_path / "chat123"
+    conversation_path.mkdir()
+
+    mock_store = MagicMock()
+    mock_store.get.return_value = {"ids": ["document1"]}
+
+    monkeypatch.setattr(
+        vector_module,
+        "Chroma",
+        lambda **kwargs: mock_store
+    )
+
+    assert vector_module.vector_store_exists("chat123") is True
+
+
+def test_vector_store_does_not_exist(tmp_path, monkeypatch):
+    monkeypatch.setattr(vector_module, "DB_PATH", str(tmp_path))
+
+    assert vector_module.vector_store_exists("missing-chat") is False
+
+
+def test_close_vector_store_without_store():
+    vector_module.close_vector_store(None)

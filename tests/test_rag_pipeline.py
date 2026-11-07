@@ -1,96 +1,138 @@
+from unittest.mock import MagicMock
 
 import pytest
-from langchain_core.documents import Document
-from langchain_core.messages import AIMessage
-from langchain_core.runnables import RunnableLambda
 
-from src import rag_pipeline
+import src.rag_pipeline as rag_module
 
 
-def test_empty_question():
+class FakePrompt:
+    def __or__(self, model):
+        return FakeChain()
 
-    with pytest.raises(ValueError):
-        rag_pipeline.get_answer("")
+
+class FakeChain:
+    def invoke(self, inputs):
+        assert "question" in inputs
+        assert "context" in inputs
+        return MagicMock(content="This is a generated answer.")
 
 
-def test_no_relevant_documents(monkeypatch):
+def test_get_answer_empty_question():
+    with pytest.raises(ValueError, match="valid question"):
+        rag_module.get_answer("", "chat123")
 
-    class FakeVectorStore:
 
-        def similarity_search_with_relevance_scores(
-            self,
-            question,
-            k
-        ):
-            return []
+def test_get_answer_missing_conversation():
+    with pytest.raises(ValueError, match="No active conversation"):
+        rag_module.get_answer("What is AI?", None)
+
+
+def test_get_answer_no_relevant_documents(monkeypatch):
+    mock_store = MagicMock()
+    mock_store.similarity_search_with_relevance_scores.return_value = [
+        (MagicMock(), 0.10)
+    ]
 
     monkeypatch.setattr(
-        rag_pipeline,
+        rag_module,
         "load_vector_store",
-        lambda: FakeVectorStore()
+        lambda conversation_id: mock_store
     )
 
-    answer, sources = rag_pipeline.get_answer(
-        "What is artificial intelligence?"
+    monkeypatch.setattr(
+        rag_module,
+        "close_vector_store",
+        lambda store: None
+    )
+
+    answer, sources = rag_module.get_answer(
+        "What is AI?",
+        "chat123"
     )
 
     assert "couldn't find relevant information" in answer
     assert sources == []
 
 
-def test_successful_answer_uses_groq_model(monkeypatch):
+def test_get_answer_generates_answer(monkeypatch):
+    document = MagicMock()
+    document.page_content = "Artificial Intelligence is a field of computer science."
+    document.metadata = {"source": "AI.pdf", "page": 2}
 
-    class FakeVectorStore:
-
-        def similarity_search_with_relevance_scores(
-            self,
-            question,
-            k
-        ):
-            return [
-                (
-                    Document(
-                        page_content="AI systems perform tasks that usually need human intelligence.",
-                        metadata={"source": "guide.pdf", "page": 2},
-                    ),
-                    0.9,
-                )
-            ]
-
-    model_options = {}
-
-    def fake_chat_model(**options):
-        model_options.update(options)
-
-        return RunnableLambda(
-            lambda _prompt: AIMessage(
-                content="AI enables intelligent tasks."
-            )
-        )
-
-    monkeypatch.setattr(
-        rag_pipeline,
-        "load_vector_store",
-        lambda: FakeVectorStore()
-    )
-
-    monkeypatch.setattr(
-        rag_pipeline,
-        "ChatGroq",
-        fake_chat_model
-    )
-
-    answer, sources = rag_pipeline.get_answer("What is AI?")
-
-    assert answer == "AI enables intelligent tasks."
-
-    assert sources == [
-        {"file": "guide.pdf", "page": 2}
+    mock_store = MagicMock()
+    mock_store.similarity_search_with_relevance_scores.return_value = [
+        (document, 0.85)
     ]
 
-    assert model_options["model"] == rag_pipeline.GROQ_CHAT_MODEL
-    assert model_options["api_key"] == rag_pipeline.GROQ_API_KEY
-    assert model_options["max_retries"] == 2
-    assert model_options["timeout"] == 60
-    assert model_options["max_tokens"] == 512
-    assert model_options["temperature"] == 0
+    monkeypatch.setattr(
+        rag_module,
+        "load_vector_store",
+        lambda conversation_id: mock_store
+    )
+
+    monkeypatch.setattr(
+        rag_module,
+        "close_vector_store",
+        lambda store: None
+    )
+
+    monkeypatch.setattr(
+        rag_module.ChatPromptTemplate,
+        "from_template",
+        lambda template: FakePrompt()
+    )
+
+    monkeypatch.setattr(
+        rag_module,
+        "ChatGroq",
+        lambda **kwargs: MagicMock()
+    )
+
+    answer, sources = rag_module.get_answer(
+        "What is AI?",
+        "chat123"
+    )
+
+    assert answer == "This is a generated answer."
+    assert sources == [{"file": "AI.pdf", "page": 2}]
+
+
+def test_get_answer_closes_vector_store(monkeypatch):
+    document = MagicMock()
+    document.page_content = "Sample content"
+    document.metadata = {"source": "sample.pdf", "page": 1}
+
+    mock_store = MagicMock()
+    mock_store.similarity_search_with_relevance_scores.return_value = [
+        (document, 0.90)
+    ]
+
+    close_mock = MagicMock()
+
+    monkeypatch.setattr(
+        rag_module,
+        "load_vector_store",
+        lambda conversation_id: mock_store
+    )
+
+    monkeypatch.setattr(
+        rag_module,
+        "close_vector_store",
+        close_mock
+    )
+
+    monkeypatch.setattr(
+        rag_module.ChatPromptTemplate,
+        "from_template",
+        lambda template: FakePrompt()
+    )
+
+    monkeypatch.setattr(
+        rag_module,
+        "ChatGroq",
+        lambda **kwargs: MagicMock()
+    )
+
+    rag_module.get_answer("Explain this", "chat123")
+
+    close_mock.assert_called_once_with(mock_store)

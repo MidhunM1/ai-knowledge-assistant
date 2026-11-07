@@ -23,6 +23,8 @@ def get_secret(name):
 # API keys
 GOOGLE_API_KEY = get_secret("GOOGLE_API_KEY")
 GROQ_API_KEY = get_secret("GROQ_API_KEY")
+SUPABASE_URL = get_secret("SUPABASE_URL")
+SUPABASE_KEY = get_secret("SUPABASE_KEY")
 
 # Models
 GROQ_CHAT_MODEL = "openai/gpt-oss-120b"

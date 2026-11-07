@@ -1,81 +1,53 @@
-# 🧠 AI Knowledge Assistant
 
-An intelligent PDF question-answering application built using Python, Streamlit, LangChain, Gemini Embeddings, Groq, and ChromaDB.
+# AI Knowledge Assistant
 
-Upload your PDF documents and interact with them through a conversational AI assistant. The application uses **Retrieval-Augmented Generation (RAG)** to retrieve relevant information and generate context-based answers with document and page references.
+An AI-powered application that allows users to upload PDF documents and ask questions about their content. The system uses Retrieval-Augmented Generation (RAG) to retrieve relevant information from uploaded documents and generate context-aware answers.
 
-## ✨ Features
+## Features
 
-- 📄 **Multiple PDF Uploads** – Upload and process multiple PDF documents.
-- 🔍 **Text Extraction** – Extract text from regular PDF documents.
-- 👁️ **OCR Support** – Extract text from scanned and image-based PDFs using Tesseract OCR.
-- ✂️ **Text Chunking** – Split extracted content into smaller, manageable chunks.
-- 🧠 **Gemini Embeddings** – Generate document embeddings using Google's Gemini embedding model.
-- 🗄️ **Vector Database** – Store and retrieve document embeddings using ChromaDB.
-- 💬 **AI Question Answering** – Generate answers using Groq-powered language models.
-- 🔗 **Source References** – Display source filenames and page numbers.
-- 📝 **Conversation History** – Maintain chat context for follow-up questions.
-- 🧹 **Knowledge Base Management** – Clear uploaded documents and stored knowledge.
-- 🎨 **Simple Chat Interface** – Clean, minimal interface inspired by modern AI chat applications.
+- User registration and email login using Supabase Authentication
+- Multiple PDF document uploads
+- PDF text extraction
+- OCR support for scanned documents using Tesseract
+- Text splitting into smaller chunks
+- Gemini embeddings for document vectorization
+- ChromaDB for vector storage and similarity search
+- Groq LLM for AI-generated answers
+- Relevant document context and source references
+- Conversation history management
+- Create and delete conversations
+- Knowledge base management
+- Streamlit-based interactive interface
 
-## 🛠️ Technology Stack
+## Technologies Used
 
 | Technology | Purpose |
 |---|---|
-| Python | Core programming language |
-| Streamlit | Web application interface |
+| Python | Main programming language |
+| Streamlit | User interface |
 | LangChain | RAG application framework |
-| Google Gemini API | Text embeddings |
-| Groq API | AI answer generation |
+| Gemini | Text embeddings |
+| Groq | AI answer generation |
 | ChromaDB | Vector database |
-| PyPDF | PDF text extraction |
-| PyMuPDF | PDF page rendering |
-| Tesseract OCR | Scanned document text extraction |
-| Pytest | Automated testing |
+| Supabase | User authentication and conversation storage |
+| PyMuPDF / PyPDF | PDF processing |
+| Tesseract OCR | Text extraction from scanned documents |
 
-## ⚙️ Project Architecture
+## Project Architecture
 
-The application follows a Retrieval-Augmented Generation (RAG) workflow.
+1. User uploads PDF documents.
+2. Document loader extracts text from PDFs.
+3. OCR processes scanned documents when required.
+4. Text splitter divides extracted text into chunks.
+5. Gemini generates embeddings for the chunks.
+6. ChromaDB stores the embeddings.
+7. User submits a question.
+8. Similarity search retrieves relevant document chunks.
+9. Retrieved context is passed to the Groq language model.
+10. The application generates an answer using the retrieved context.
+11. The answer and relevant source information are displayed.
 
-```text
-             PDF Upload
-                 |
-                 v
-          Document Loader
-                 |
-          Text Extraction
-                 |
-           OCR (if needed)
-                 |
-                 v
-            Text Splitter
-                 |
-                 v
-          Gemini Embeddings
-                 |
-                 v
-             ChromaDB
-                 |
-                 v
-          User Question
-                 |
-                 v
-        Similarity Search
-                 |
-                 v
-          Relevant Context
-                 |
-                 v
-          Groq LLM Model
-                 |
-                 v
-          Generated Answer
-                 |
-                 v
-       Answer + Source Pages
-```
-
-## 📁 Project Structure
+## Project Structure
 
 ```text
 AI-Knowledge-Assistant/
@@ -88,125 +60,116 @@ AI-Knowledge-Assistant/
 ├── .gitignore
 │
 ├── src/
+│   ├── __init__.py
 │   ├── document_loader.py
 │   ├── text_splitter.py
 │   ├── embeddings.py
 │   ├── vector_store.py
 │   ├── rag_pipeline.py
-│   └── error_handling.py
+│   ├── error_handling.py
+│   ├── auth.py
+│   ├── chat_history.py
+│   └── supabase_client.py
 │
 ├── tests/
-│   ├── test_document_loader.py
-│   ├── test_text_splitter.py
-│   ├── test_embeddings.py
-│   ├── test_vector_store.py
-│   ├── test_rag_pipeline.py
-│   └── test_error_handling.py
+│   └── test_supabase.py
 │
-└── data/
-    └── uploaded_pdfs/
+├── data/
+│   └── uploaded_pdfs/
+│
+└── chroma_db/
 ```
 
-*Note: Uploaded PDFs, virtual environments, API keys, and generated ChromaDB files are excluded from the Git repository.*
+Local runtime folders such as `chroma_db/` and uploaded PDF storage are not included in the GitHub repository.
 
-## 🚀 Installation and Setup
+## Installation and Setup
 
-### 1. Clone the Repository
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/MidhunM1/ai-knowledge-assistant.git
 ```
 
-### 2. Navigate to the Project Directory
+### 2. Open the project directory
 
 ```bash
 cd ai-knowledge-assistant
 ```
 
-### 3. Create a Virtual Environment
+### 3. Create a virtual environment
 
 ```bash
 python -m venv venv
 ```
 
-### 4. Activate the Virtual Environment
+### 4. Activate the virtual environment
 
-**Windows:**
+Windows:
 
-```powershell
+```bash
 venv\Scripts\activate
 ```
 
-### 5. Install Dependencies
+### 5. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 6. Install Tesseract OCR
-
-OCR functionality requires the Tesseract OCR application in addition to the Python packages.
-
-Install Tesseract for your operating system and ensure its executable is accessible.
-
-Windows installation: https://github.com/UB-Mannheim/tesseract/wiki
-
-### 7. Configure API Keys
+### 6. Configure environment variables
 
 Create a `.env` file in the project root directory.
+
+Add your own API credentials:
 
 ```env
 GOOGLE_API_KEY=your_google_api_key
 GROQ_API_KEY=your_groq_api_key
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_KEY=your_supabase_key
 ```
 
-The Google API key is used for embeddings, while the Groq API key is used for answer generation.
+Do not upload your `.env` file or expose your API credentials on GitHub.
 
-**Important:** Never upload your `.env` file or expose your API keys on GitHub.
+### 7. Configure Tesseract OCR
 
-## ▶️ Run the Application
+Install Tesseract OCR on your system if OCR functionality is required.
 
-Start the Streamlit application:
+Windows installation:
+https://github.com/UB-Mannheim/tesseract/wiki
+
+### 8. Run the application
 
 ```bash
 streamlit run app.py
 ```
 
-Open the local URL displayed in your terminal to access the application.
+The application will open in your browser.
 
-## 🧪 Run Automated Tests
+## Running Tests
 
-Execute the test suite:
+Run the test suite using:
 
 ```bash
 python -m pytest tests -v
 ```
 
-**Latest test result: 15 tests passed.**
+## Deployment
 
-## 🔐 Security
+The application can be deployed using Streamlit Community Cloud.
 
-- API keys are stored in environment variables or Streamlit Secrets.
-- Sensitive configuration files are excluded using `.gitignore`.
-- Uploaded PDF documents and generated vector database files are not committed to GitHub.
+Configure the required API credentials in the application's Streamlit Secrets settings instead of uploading a `.env` file.
 
-## 🔮 Future Improvements
+## Security
 
-- Support additional document formats.
-- Improve conversational retrieval and follow-up question handling.
-- Add document preview functionality.
-- Improve document management and user experience.
-- Enhance deployment and cloud storage capabilities.
+- API credentials are stored in environment variables or Streamlit Secrets.
+- User authentication is handled through Supabase.
+- Authenticated sessions are used for user-specific operations.
+- Secret files and local databases should not be committed to GitHub.
 
-## 👨‍💻 Author
+## Author
 
 **Midhun**
 
-B.Sc. Computer Science – Artificial Intelligence & Machine Learning  
+B.Sc. Computer Science – Artificial Intelligence and Machine Learning  
 VIT Chennai | 2024–2027
-
-**Interests:** Artificial Intelligence, Machine Learning, Software Development, and Emerging Technologies.
-
----
-
-⭐ If you find this project interesting, consider giving the repository a star.

@@ -2,16 +2,38 @@
 import streamlit as st
 import os
 import hashlib
+import shutil
 
 from src.document_loader import load_multiple_pdfs
 from src.text_splitter import split_documents
-from src.vector_store import create_vector_store, clear_vector_store
+
+from src.vector_store import (
+    create_vector_store,
+    clear_vector_store,
+    vector_store_exists,
+    close_vector_store
+)
+
 from src.rag_pipeline import get_answer
 from src.error_handling import safe_api_error_message
 
+from src.chat_history import (
+    create_conversation,
+    get_conversations,
+    get_messages,
+    save_message,
+    rename_conversation,
+    delete_conversation
+)
+
+from src.auth import sign_up, sign_in, sign_out
+
 
 MAX_FILE_SIZE = 10 * 1024 * 1024
+
 UPLOAD_FOLDER = "data/uploaded_pdfs"
+
+DB_FOLDER = "chroma_db"
 
 
 # ---------------- PAGE CONFIGURATION ----------------
@@ -29,15 +51,13 @@ st.set_page_config(
 st.markdown("""
 <style>
 
-/* Main page */
+/* ==============================
+   MAIN APPLICATION
+============================== */
 
 .stApp {
-    background-color: #ffffff;
-    color: #202123;
-}
-
-header[data-testid="stHeader"] {
-    background-color: #ffffff;
+    background-color: var(--background-color);
+    color: var(--text-color);
 }
 
 .block-container {
@@ -46,21 +66,33 @@ header[data-testid="stHeader"] {
     padding-bottom: 7rem;
 }
 
-/* Sidebar */
+/* ==============================
+   HEADER
+============================== */
+
+header[data-testid="stHeader"] {
+    background-color: var(--background-color);
+}
+
+/* ==============================
+   SIDEBAR
+============================== */
 
 [data-testid="stSidebar"] {
-    background-color: #f7f7f8;
-    border-right: 1px solid #e5e5e5;
+    background-color: var(--secondary-background-color);
+    border-right: 1px solid var(--border-color, rgba(128,128,128,0.2));
 }
 
-[data-testid="stSidebar"] * {
-    color: #202123;
+/* ==============================
+   TEXT
+============================== */
+
+h1, h2, h3, h4, p, label {
+    color: var(--text-color);
 }
 
-/* Headings */
-
-h1, h2, h3, p, label {
-    color: #202123;
+.stMarkdown {
+    color: var(--text-color);
 }
 
 .main-title {
@@ -69,118 +101,181 @@ h1, h2, h3, p, label {
     text-align: center;
     margin-top: 100px;
     margin-bottom: 12px;
-    color: #202123;
+    color: var(--text-color);
 }
 
 .subtitle {
     text-align: center;
-    color: #666666;
+    color: var(--text-color);
+    opacity: 0.65;
     font-size: 15px;
     margin-bottom: 35px;
 }
 
-/* Buttons */
+.small-text {
+    color: var(--text-color);
+    opacity: 0.65;
+    font-size: 12px;
+}
+
+/* ==============================
+   TEXT INPUTS
+============================== */
+
+.stTextInput input {
+    background-color: var(--secondary-background-color) !important;
+    color: var(--text-color) !important;
+    -webkit-text-fill-color: var(--text-color) !important;
+    border: 1px solid var(--border-color, rgba(128,128,128,0.3)) !important;
+    border-radius: 8px !important;
+}
+
+.stTextInput input::placeholder {
+    color: var(--text-color) !important;
+    -webkit-text-fill-color: var(--text-color) !important;
+    opacity: 0.55 !important;
+}
+
+.stTextInput input:focus {
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 0 0 1px var(--primary-color) !important;
+}
+
+/* ==============================
+   BUTTONS
+============================== */
 
 .stButton > button {
+    background-color: var(--secondary-background-color);
+    color: var(--text-color) !important;
+    border: 1px solid var(--border-color, rgba(128,128,128,0.3));
     border-radius: 8px;
-    border: 1px solid #dddddd;
-    background: #ffffff;
-    color: #202123 !important;
     min-height: 38px;
 }
 
 .stButton > button:hover {
-    background: #eeeeee;
-    color: #202123 !important;
-    border-color: #cccccc;
+    border-color: var(--primary-color);
+    color: var(--primary-color) !important;
 }
 
-/* PDF uploader */
+/* ==============================
+   FORM BUTTONS
+============================== */
+
+.stFormSubmitButton > button {
+    background-color: var(--primary-color);
+    color: white !important;
+    border: 1px solid var(--primary-color);
+    border-radius: 8px;
+    min-height: 40px;
+}
+
+.stFormSubmitButton > button:hover {
+    opacity: 0.85;
+    color: white !important;
+}
+
+/* ==============================
+   FILE UPLOADER
+============================== */
 
 [data-testid="stFileUploader"] {
-    background: #ffffff !important;
-    border: 1px dashed #b8b8b8 !important;
+    background-color: var(--secondary-background-color);
+    border: 1px dashed var(--border-color, rgba(128,128,128,0.3));
     border-radius: 10px;
     padding: 12px;
-    color: #202123 !important;
 }
 
 [data-testid="stFileUploader"] * {
-    color: #202123 !important;
+    color: var(--text-color);
 }
 
 [data-testid="stFileUploader"] section {
-    background: #ffffff !important;
+    background-color: transparent !important;
 }
 
 [data-testid="stFileUploader"] button {
-    background: #f5f5f5 !important;
-    color: #202123 !important;
-    border: 1px solid #cccccc !important;
+    background-color: var(--background-color);
+    color: var(--text-color) !important;
+    border: 1px solid var(--border-color, rgba(128,128,128,0.3));
 }
 
-/* Chat messages */
+/* ==============================
+   CHAT MESSAGES
+============================== */
 
 [data-testid="stChatMessage"] {
-    background: transparent;
+    background-color: transparent;
     border: none;
     padding: 12px 0;
-    color: #202123;
+    color: var(--text-color);
 }
 
-/* Bottom chat area */
+/* ==============================
+   CHAT INPUT
+============================== */
 
 [data-testid="stBottom"] {
-    background: #0e0e0e !important;
+    background-color: var(--background-color);
 }
 
-/* Chat input container */
-
 [data-testid="stChatInput"] {
-    background: #000000 !important;
-    border: 1.5px solid #ff3b3b !important;
-    border-radius: 12px !important;
-    box-shadow: none !important;
+    background-color: var(--secondary-background-color);
+    border: 1px solid var(--border-color, rgba(128,128,128,0.3));
+    border-radius: 12px;
+    box-shadow: none;
 }
 
 [data-testid="stChatInput"] > div {
-    background: #000000 !important;
+    background-color: transparent;
 }
-
-/* Typed text */
 
 [data-testid="stChatInput"] textarea {
-    background: #000000 !important;
-    color: #ffffff !important;
-    -webkit-text-fill-color: #ffffff !important;
-    caret-color: #ffffff !important;
+    background-color: transparent;
+    color: var(--text-color) !important;
+    -webkit-text-fill-color: var(--text-color) !important;
+    caret-color: var(--text-color);
 }
-
-/* Placeholder */
 
 [data-testid="stChatInput"] textarea::placeholder {
-    color: #cccccc !important;
-    -webkit-text-fill-color: #cccccc !important;
-    opacity: 1 !important;
+    color: var(--text-color) !important;
+    -webkit-text-fill-color: var(--text-color) !important;
+    opacity: 0.55;
 }
-
-/* Send button */
 
 [data-testid="stChatInput"] button {
-    background: #ff3b3b !important;
-    color: #ffffff !important;
-    border: none !important;
+    background-color: var(--primary-color);
+    color: white !important;
+    border: none;
+    border-radius: 8px;
 }
 
-/* Separators */
+/* ==============================
+   TABS
+============================== */
+
+.stTabs [data-baseweb="tab"] {
+    color: var(--text-color);
+}
+
+.stTabs [aria-selected="true"] {
+    color: var(--primary-color) !important;
+}
+
+/* ==============================
+   DIVIDERS
+============================== */
 
 hr {
-    border-color: #e5e5e5;
+    border-color: var(--border-color, rgba(128,128,128,0.2));
 }
 
-.small-text {
-    color: #666666;
-    font-size: 12px;
+/* ==============================
+   SCROLLBAR
+============================== */
+
+* {
+    scrollbar-color: var(--text-color) var(--background-color);
 }
 
 </style>
@@ -194,7 +289,12 @@ defaults = {
     "documents_processed": False,
     "document_names": [],
     "total_pages": 0,
-    "total_chunks": 0
+    "total_chunks": 0,
+    "current_conversation_id": None,
+    "uploader_key": 0,
+    "access_token": None,
+    "refresh_token": None,
+    "user": None
 }
 
 for key, value in defaults.items():
@@ -203,39 +303,469 @@ for key, value in defaults.items():
         st.session_state[key] = value
 
 
+# ---------------- HELPER FUNCTIONS ----------------
+
+def reset_current_chat():
+
+    st.session_state.messages = []
+
+    st.session_state.documents_processed = False
+
+    st.session_state.document_names = []
+
+    st.session_state.total_pages = 0
+
+    st.session_state.total_chunks = 0
+
+    st.session_state.uploader_key += 1
+
+
+def get_conversation_upload_folder(conversation_id):
+
+    return os.path.join(
+        UPLOAD_FOLDER,
+        str(conversation_id)
+    )
+
+
+def get_conversation_vector_folder(conversation_id):
+
+    return os.path.join(
+        DB_FOLDER,
+        str(conversation_id)
+    )
+
+
+def create_new_conversation():
+
+    conversation = create_conversation(
+        st.session_state.access_token,
+        st.session_state.refresh_token,
+        st.session_state.user.id
+    )
+
+    st.session_state.current_conversation_id = conversation["id"]
+
+    reset_current_chat()
+
+
+def cleanup_conversation_files(conversation_id):
+
+    warnings = []
+
+    # Try to clear the ChromaDB collection.
+    # Do not manually delete an open ChromaDB database folder.
+
+    try:
+
+        clear_vector_store(conversation_id)
+
+    except Exception as error:
+
+        warnings.append(
+            f"ChromaDB cleanup could not be completed: {error}"
+        )
+
+    # Delete uploaded PDFs.
+
+    upload_folder = get_conversation_upload_folder(
+        conversation_id
+    )
+
+    try:
+
+        if os.path.exists(upload_folder):
+
+            shutil.rmtree(upload_folder)
+
+    except Exception as error:
+
+        warnings.append(
+            f"Uploaded PDF cleanup failed: {error}"
+        )
+
+    return warnings
+
+
+# ---------------- AUTHENTICATION ----------------
+
+if not st.session_state.user:
+
+    st.markdown(
+        "<h1 style='text-align:center;'>📚 AI Knowledge Assistant</h1>",
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        "<p style='text-align:center;'>Login or create an account to continue.</p>",
+        unsafe_allow_html=True
+    )
+
+    login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
+
+    with login_tab:
+
+        with st.form("login_form"):
+
+            email = st.text_input(
+                "Email",
+                placeholder="Enter your email address"
+            )
+
+            password = st.text_input(
+                "Password",
+                type="password",
+                placeholder="Enter your password"
+            )
+
+            login_button = st.form_submit_button(
+                "Login",
+                use_container_width=True
+            )
+
+            if login_button:
+
+                if not email.strip() or not password:
+
+                    st.warning(
+                        "Please enter both your email and password."
+                    )
+
+                else:
+
+                    try:
+
+                        response = sign_in(
+                            email.strip(),
+                            password
+                        )
+
+                        if response.session is None or response.user is None:
+
+                            st.error(
+                                "Login did not return an active session. "
+                                "If email confirmation is enabled, verify "
+                                "your email before logging in."
+                            )
+
+                        else:
+
+                            st.session_state.access_token = (
+                                response.session.access_token
+                            )
+
+                            st.session_state.refresh_token = (
+                                response.session.refresh_token
+                            )
+
+                            st.session_state.user = response.user
+
+                            st.success("Login successful!")
+
+                            st.rerun()
+
+                    except Exception as error:
+
+                        st.error(f"Login failed: {str(error)}")
+
+    with signup_tab:
+
+        with st.form("signup_form"):
+
+            display_name = st.text_input(
+                "Your name",
+                placeholder="Enter your name"
+            )
+
+            signup_email = st.text_input(
+                "Email address",
+                placeholder="Enter your email address"
+            )
+
+            signup_password = st.text_input(
+                "Password",
+                type="password",
+                placeholder="Create a password (at least 6 characters)"
+            )
+
+            signup_button = st.form_submit_button(
+                "Create Account",
+                use_container_width=True
+            )
+
+            if signup_button:
+
+                try:
+
+                    response = sign_up(
+                        signup_email,
+                        signup_password,
+                        display_name
+                    )
+
+                    if response.session:
+
+                        st.session_state.access_token = (
+                            response.session.access_token
+                        )
+
+                        st.session_state.refresh_token = (
+                            response.session.refresh_token
+                        )
+
+                        st.session_state.user = response.user
+
+                        st.success("Account created!")
+
+                        st.rerun()
+
+                    else:
+
+                        st.success(
+                            "Account created! Please verify your email, "
+                            "then log in."
+                        )
+
+                except Exception as error:
+
+                    st.error(f"Sign up failed: {str(error)}")
+
+    st.stop()
+
+
 # ---------------- SIDEBAR ----------------
 
 with st.sidebar:
 
+    user_name = (
+        st.session_state.user.user_metadata.get("display_name")
+        or st.session_state.user.email
+    )
+
     st.markdown("## 📚 AI Knowledge Assistant")
+
+    st.caption(f"Logged in as: {user_name}")
+
+
+    # ---------------- LOGOUT ----------------
+
+    if st.button("Logout", use_container_width=True):
+
+        try:
+
+            sign_out(
+                st.session_state.access_token,
+                st.session_state.refresh_token
+            )
+
+        except Exception:
+            pass
+
+        st.session_state.access_token = None
+        st.session_state.refresh_token = None
+        st.session_state.user = None
+        st.session_state.current_conversation_id = None
+
+        reset_current_chat()
+
+        st.rerun()
+
+
+    # ---------------- CHAT HISTORY ----------------
+
+    st.subheader("Chat History")
+
+    try:
+
+        conversations = get_conversations(
+            st.session_state.access_token,
+            st.session_state.refresh_token
+        )
+
+        if conversations:
+
+            for conversation in conversations:
+
+                conversation_id = conversation["id"]
+
+                col1, col2 = st.columns([0.80, 0.20])
+
+                with col1:
+
+                    if st.button(
+                        conversation["title"],
+                        key=f"chat_{conversation_id}",
+                        use_container_width=True
+                    ):
+
+                        messages = get_messages(
+                            st.session_state.access_token,
+                            st.session_state.refresh_token,
+                            conversation_id
+                        )
+
+                        st.session_state.current_conversation_id = (
+                            conversation_id
+                        )
+
+                        st.session_state.messages = [
+                            {
+                                "role": message["role"],
+                                "content": message["content"]
+                            }
+                            for message in messages
+                        ]
+
+                        # Restore this conversation's document status.
+
+                        upload_folder = get_conversation_upload_folder(
+                            conversation_id
+                        )
+
+                        if os.path.isdir(upload_folder):
+
+                            document_names = [
+                                filename
+                                for filename in os.listdir(upload_folder)
+                                if os.path.isfile(
+                                    os.path.join(upload_folder, filename)
+                                )
+                            ]
+
+                        else:
+
+                            document_names = []
+
+                        has_knowledge_base = (
+                            vector_store_exists(conversation_id)
+                            and bool(document_names)
+                        )
+
+                        st.session_state.documents_processed = (
+                            has_knowledge_base
+                        )
+
+                        st.session_state.document_names = (
+                            document_names if has_knowledge_base else []
+                        )
+
+                        st.session_state.total_pages = 0
+
+                        st.session_state.total_chunks = 0
+
+                        st.session_state.uploader_key += 1
+
+                        st.rerun()
+
+                with col2:
+
+                    # ---------------- DELETE CONVERSATION ----------------
+
+                    if st.button(
+                        "🗑️",
+                        key=f"delete_{conversation_id}",
+                        help="Delete conversation",
+                        use_container_width=True
+                    ):
+
+                        try:
+
+                            # First clean local files.
+                            # A local cleanup error should not prevent
+                            # deletion of the Supabase conversation.
+
+                            cleanup_warnings = cleanup_conversation_files(
+                                conversation_id
+                            )
+
+                            # Delete conversation and messages from Supabase.
+
+                            delete_conversation(
+                                st.session_state.access_token,
+                                st.session_state.refresh_token,
+                                conversation_id
+                            )
+
+                            # Reset active chat if it was deleted.
+
+                            if (
+                                st.session_state.current_conversation_id
+                                == conversation_id
+                            ):
+
+                                st.session_state.current_conversation_id = None
+
+                                reset_current_chat()
+
+                            st.success("Conversation deleted!")
+
+                            for warning in cleanup_warnings:
+
+                                st.warning(warning)
+
+                            st.rerun()
+
+                        except Exception as error:
+
+                            st.error(
+                                f"Could not delete conversation: {error}"
+                            )
+
+        else:
+
+            st.caption("No previous conversations yet.")
+
+    except Exception as error:
+
+        st.error(f"Could not load chat history: {error}")
+
+
+    st.divider()
 
     st.caption("Chat with your PDF documents")
 
     st.divider()
 
-    # New chat
 
-    if st.button("＋ New Chat", use_container_width=True):
+    # ---------------- NEW CHAT ----------------
 
-        st.session_state.messages = []
+    if st.button(
+        "➕ New Chat",
+        use_container_width=True
+    ):
 
-        st.rerun()
+        try:
+
+            create_new_conversation()
+
+            st.rerun()
+
+        except Exception as error:
+
+            st.error(f"Could not create a new chat: {error}")
+
 
     st.divider()
 
-    # Upload documents
+
+    # ---------------- UPLOAD DOCUMENTS ----------------
 
     st.markdown("### Upload documents")
 
     uploaded_files = st.file_uploader(
         "Choose PDF files",
         type=["pdf"],
-        accept_multiple_files=True
+        accept_multiple_files=True,
+        key=f"pdf_uploader_{st.session_state.uploader_key}"
     )
 
-    # Process documents
 
-    if st.button("Process Documents", use_container_width=True):
+    # ---------------- PROCESS DOCUMENTS ----------------
+
+    if st.button(
+        "Process Documents",
+        use_container_width=True
+    ):
 
         if not uploaded_files:
 
@@ -245,10 +775,35 @@ with st.sidebar:
 
             try:
 
-                os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+                # Create a conversation if one is not active.
+
+                if not st.session_state.current_conversation_id:
+
+                    create_new_conversation()
+
+                conversation_id = (
+                    st.session_state.current_conversation_id
+                )
+
+                conversation_folder = (
+                    get_conversation_upload_folder(conversation_id)
+                )
+
+                # Replace only this conversation's previous PDFs.
+
+                if os.path.exists(conversation_folder):
+
+                    shutil.rmtree(conversation_folder)
+
+                os.makedirs(
+                    conversation_folder,
+                    exist_ok=True
+                )
 
                 file_paths = []
+
                 document_names = []
+
                 uploaded_hashes = set()
 
                 for uploaded_file in uploaded_files:
@@ -282,7 +837,7 @@ with st.sidebar:
                     )
 
                     file_path = os.path.join(
-                        UPLOAD_FOLDER,
+                        conversation_folder,
                         safe_name
                     )
 
@@ -296,17 +851,14 @@ with st.sidebar:
 
                     document_names.append(safe_name)
 
+
                 with st.spinner(
                     "Reading and processing documents..."
                 ):
 
-                    documents = load_multiple_pdfs(
-                        file_paths
-                    )
+                    documents = load_multiple_pdfs(file_paths)
 
-                    chunks = split_documents(
-                        documents
-                    )
+                    chunks = split_documents(documents)
 
                     if not chunks:
 
@@ -314,17 +866,30 @@ with st.sidebar:
                             "No readable text found in the PDFs."
                         )
 
-                    create_vector_store(chunks)
+                    # Create the vector store.
 
-                st.session_state.documents_processed = True
+                    vector_store = create_vector_store(
+                        chunks,
+                        conversation_id
+                    )
 
-                st.session_state.document_names = document_names
+                    try:
 
-                st.session_state.total_pages = len(documents)
+                        st.session_state.documents_processed = True
 
-                st.session_state.total_chunks = len(chunks)
+                        st.session_state.document_names = document_names
 
-                st.session_state.messages = []
+                        st.session_state.total_pages = len(documents)
+
+                        st.session_state.total_chunks = len(chunks)
+
+                        st.session_state.messages = []
+
+                    finally:
+
+                        close_vector_store(vector_store)
+
+                        del vector_store
 
                 st.success(
                     "Documents processed successfully!"
@@ -334,6 +899,8 @@ with st.sidebar:
 
             except Exception as error:
 
+                st.session_state.documents_processed = False
+
                 st.error(
                     safe_api_error_message(
                         error,
@@ -341,9 +908,11 @@ with st.sidebar:
                     )
                 )
 
+
     st.divider()
 
-    # Uploaded document list
+
+    # ---------------- UPLOADED DOCUMENT LIST ----------------
 
     st.markdown("### Your documents")
 
@@ -362,7 +931,8 @@ with st.sidebar:
 
         st.caption("No documents uploaded yet.")
 
-    # Knowledge base status
+
+    # ---------------- KNOWLEDGE BASE STATUS ----------------
 
     if st.session_state.documents_processed:
 
@@ -372,49 +942,68 @@ with st.sidebar:
 
         st.info("Upload PDFs to get started")
 
+
     st.divider()
 
-    # Clear knowledge base
+
+
+# ---------------- CLEAR KNOWLEDGE BASE ----------------
+
+with st.sidebar:
 
     if st.button(
         "🗑️ Clear Knowledge Base",
         use_container_width=True
     ):
 
-        try:
+        conversation_id = (
+            st.session_state.current_conversation_id
+        )
 
-            clear_vector_store()
+        if not conversation_id:
 
-            if os.path.exists(UPLOAD_FOLDER):
+            st.warning("No active conversation found.")
 
-                for filename in os.listdir(UPLOAD_FOLDER):
+        else:
 
-                    file_path = os.path.join(
-                        UPLOAD_FOLDER,
-                        filename
+            try:
+
+                # Clear ChromaDB and uploaded PDFs.
+
+                cleanup_warnings = cleanup_conversation_files(
+                    conversation_id
+                )
+
+                # Reset document and chat state.
+
+                reset_current_chat()
+
+                if cleanup_warnings:
+
+                    st.warning(
+                        "Chat was reset, but some local files "
+                        "could not be cleaned up."
                     )
 
-                    if os.path.isfile(file_path):
+                    for warning in cleanup_warnings:
+                        st.warning(warning)
 
-                        os.remove(file_path)
+                else:
 
-            st.session_state.documents_processed = False
+                    st.success(
+                        "Knowledge base cleared successfully."
+                    )
 
-            st.session_state.messages = []
+                st.rerun()
 
-            st.session_state.document_names = []
+            except Exception as error:
 
-            st.session_state.total_pages = 0
+                st.error(
+                    f"Could not clear knowledge base: {error}"
+                )
 
-            st.session_state.total_chunks = 0
 
-            st.success("Knowledge base cleared.")
-
-            st.rerun()
-
-        except Exception as error:
-
-            st.error(str(error))
+# ---------------- MAIN CHAT AREA ----------------
 
 
 # ---------------- MAIN CHAT AREA ----------------
@@ -468,18 +1057,25 @@ if question:
 
     else:
 
-        st.session_state.messages.append(
-            {
-                "role": "user",
-                "content": question
-            }
-        )
-
-        with st.chat_message("user"):
-
-            st.markdown(question)
-
         try:
+
+            # Create a conversation if one is not active.
+
+            if not st.session_state.current_conversation_id:
+
+                create_new_conversation()
+
+            conversation_id = (
+                st.session_state.current_conversation_id
+            )
+
+            # Show user question.
+
+            with st.chat_message("user"):
+
+                st.markdown(question)
+
+            # Generate answer.
 
             with st.chat_message("assistant"):
 
@@ -487,7 +1083,8 @@ if question:
 
                     answer, sources = get_answer(
                         question,
-                        st.session_state.messages[:-1]
+                        conversation_id,
+                        st.session_state.messages
                     )
 
                 st.markdown(answer)
@@ -503,6 +1100,8 @@ if question:
                             f"· Page {source['page']}"
                         )
 
+            # Prepare answer with sources.
+
             answer_text = answer
 
             if sources:
@@ -516,20 +1115,58 @@ if question:
                         f"(Page {source['page']})\n"
                     )
 
-            st.session_state.messages.append(
-                {
-                    "role": "assistant",
-                    "content": answer_text
-                }
+            # Set conversation title using first question.
+
+            if not st.session_state.messages:
+
+                chat_title = question.strip()[:50]
+
+                rename_conversation(
+                    st.session_state.access_token,
+                    st.session_state.refresh_token,
+                    conversation_id,
+                    chat_title
+                )
+
+            # Save user message.
+
+            save_message(
+                st.session_state.access_token,
+                st.session_state.refresh_token,
+                conversation_id,
+                "user",
+                question
             )
 
-        except Exception as error:
+            # Save assistant message.
 
-            st.session_state.messages.pop()
+            save_message(
+                st.session_state.access_token,
+                st.session_state.refresh_token,
+                conversation_id,
+                "assistant",
+                answer_text
+            )
+
+            # Update local chat history.
+
+            st.session_state.messages.append({
+                "role": "user",
+                "content": question
+            })
+
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": answer_text
+            })
+
+            st.rerun()
+
+        except Exception as error:
 
             st.error(
                 safe_api_error_message(
                     error,
-                    "Answer generation"
+                    "Answer generation or chat saving"
                 )
             )

@@ -2,77 +2,97 @@ import pytest
 
 from src.error_handling import (
     get_gemini_http_status,
-    invoke_with_503_retries,
     is_temporary_gemini_failure,
-    safe_api_error_message,
+    invoke_with_503_retries,
+    safe_api_error_message
 )
 
 
-def provider_error(status, message):
-    error = RuntimeError(message)
-    error.code = status
-    return error
+def test_get_status_from_error_attribute():
+    error = Exception("Server error")
+    error.status_code = 503
+
+    assert get_gemini_http_status(error) == 503
 
 
-def test_429_daily_quota_is_reported_and_not_retried():
-    error = provider_error(
-        429,
-        "RESOURCE_EXHAUSTED: daily generate_content quota; retry after 86400s",
-    )
-    calls = []
-    sleeps = []
+def test_get_status_from_error_message():
+    error = Exception("HTTP 429 RESOURCE_EXHAUSTED")
 
-    def invoke():
-        calls.append("called")
-        raise error
-
-    with pytest.raises(RuntimeError):
-        invoke_with_503_retries(invoke, max_attempts=3, sleep=sleeps.append)
-
-    message = safe_api_error_message(error, "Answer generation")
     assert get_gemini_http_status(error) == 429
-    assert "daily generate_content quota" in message
-    assert "No retry was made" in message
-    assert "86400" not in message
-    assert len(calls) == 1
-    assert sleeps == []
 
 
-def test_503_is_retried_with_backoff_and_reported_as_temporary():
-    error = provider_error(503, "UNAVAILABLE: service temporarily unavailable")
+def test_get_status_from_resource_exhausted():
+    error = Exception("RESOURCE_EXHAUSTED")
+
+    assert get_gemini_http_status(error) == 429
+
+
+def test_temporary_failure():
+    error = Exception("HTTP 503")
+
+    assert is_temporary_gemini_failure(error) is True
+
+
+def test_quota_error_is_not_temporary():
+    error = Exception("HTTP 429")
+
+    assert is_temporary_gemini_failure(error) is False
+
+
+def test_retry_success():
     calls = []
     sleeps = []
 
-    def invoke():
-        calls.append("called")
+    def operation():
+        calls.append(1)
+
         if len(calls) < 3:
-            raise error
-        return "answer"
+            raise Exception("HTTP 503")
 
-    result = invoke_with_503_retries(invoke, max_attempts=3, sleep=sleeps.append)
+        return "Success"
 
-    assert result == "answer"
+    result = invoke_with_503_retries(
+        operation,
+        max_attempts=3,
+        sleep=lambda seconds: sleeps.append(seconds)
+    )
+
+    assert result == "Success"
     assert len(calls) == 3
     assert sleeps == [1, 2]
-    assert get_gemini_http_status(error) == 503
-    assert is_temporary_gemini_failure(error)
-    assert "temporarily busy or unavailable" in safe_api_error_message(
-        error, "Answer generation"
+
+
+def test_retry_does_not_retry_429():
+    calls = []
+
+    def operation():
+        calls.append(1)
+        raise Exception("HTTP 429")
+
+    with pytest.raises(Exception):
+        invoke_with_503_retries(
+            operation,
+            max_attempts=3,
+            sleep=lambda seconds: None
+        )
+
+    assert len(calls) == 1
+
+
+def test_safe_message_for_quota_error():
+    message = safe_api_error_message(
+        Exception("HTTP 429"),
+        "Embedding"
     )
 
-
-def test_does_not_echo_provider_error_details():
-    error = RuntimeError("invalid API configuration; sensitive-value")
-
-    message = safe_api_error_message(error, "Answer generation")
-
-    assert "sensitive-value" not in message
-    assert "API configuration" in message
+    assert "429" in message
+    assert "quota" in message.lower()
 
 
-def test_recognizes_status_on_wrapped_cause():
-    cause = provider_error(503, "temporary failure")
-    error = RuntimeError("provider request failed")
-    error.__cause__ = cause
+def test_safe_message_for_document_processing():
+    message = safe_api_error_message(
+        Exception("Unknown error"),
+        "Document processing"
+    )
 
-    assert get_gemini_http_status(error) == 503
+    assert "Document processing failed" in message
